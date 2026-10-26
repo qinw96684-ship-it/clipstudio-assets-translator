@@ -113,7 +113,9 @@ CLIP STUDIO 的素材库和首页其实是一个内嵌的 Edge 浏览器（WebVi
 | **每 10 分钟** | 自愈检查：进程若被意外结束（崩溃、被任务管理器杀掉），会在 10 分钟内自动恢复 |
 | **安装时** | 立即启动一次 |
 
-已在运行时不会重复启动（`MultipleInstances=IgnoreNew`）。
+**后台进程完全隐藏运行，不会显示 node 黑色控制台窗口。**启动器会检查是否已有守护进程，避免重复实例。
+
+已在运行时不会重复启动（计划任务 `MultipleInstances=IgnoreNew`，启动器另有进程级单实例检查）。
 
 守护进程本身很轻（约 43 MB 内存），平时只是每 2 秒检查一次浏览器页面列表，没打开素材页时几乎不做事。
 
@@ -164,10 +166,13 @@ CLIPStudio-翻译插件/
 ├─ 翻译一次.ps1         ← 立即翻译当前页
 ├─ 清空缓存.ps1         ← 清空翻译缓存
 ├─ README.md
+├─ LICENSE
+├─ .gitignore
 ├─ screenshot.png
 └─ src/
    ├─ inject.js         ← 注入页面的翻译引擎（核心）
    ├─ daemon.js         ← 守护进程：发现页面并注入
+   ├─ launch-hidden.vbs ← 无窗口启动器（不显示 node 控制台）
    ├─ cdp.js            ← 极简 CDP 客户端（手写 WebSocket，零依赖）
    ├─ dict.json         ← 四种语言词库
    ├─ common.ps1        ← PowerShell 公共函数（查找 node）

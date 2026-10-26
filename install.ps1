@@ -39,14 +39,25 @@ New-ItemProperty -Path $key -Name 'CLIPStudio.exe' `
   -Value '--remote-debugging-port=9222' -PropertyType String -Force | Out-Null
 Write-Host "[1/3] 已写入 WebView2 策略：$key" -ForegroundColor Green
 
-# ---------- 2. 开机自启守护进程 ----------
+# ---------- 2. 开机自启守护进程（无窗口）----------
 $taskName = 'CLIPStudio_翻译守护'
-$action = New-ScheduledTaskAction -Execute $Node -Argument "`"$Daemon`"" -WorkingDirectory $Src
+
+# node.exe 是控制台程序，直接作为计划任务目标会弹出黑色窗口；
+# 窗口一关，node 进程就被终止（退出码 0xC000013A），翻译静默失效。
+# 所以改用 VBS 启动器：它用「隐藏窗口」方式拉起 node，全程无黑框。
+#
+# 注意：VBScript 按 ANSI 读取源码，插件目录含中文时写在源码里的路径会乱码。
+# 因此路径通过计划任务参数传入，VBS 文件本身只含纯 ASCII。
+$Vbs = Join-Path $Src 'launch-hidden.vbs'
+if (-not (Test-Path -LiteralPath $Vbs)) { throw "找不到启动器：$Vbs" }
+
+$action = New-ScheduledTaskAction -Execute 'wscript.exe' `
+  -Argument "`"$Vbs`" `"$Node`" `"$Daemon`"" -WorkingDirectory $Src
 
 # 双触发器：
 #   1) 登录时启动
-#   2) 每 10 分钟检查一次 —— 进程若被意外结束（崩溃/被杀），能在 10 分钟内自愈
-#      任务设了 MultipleInstances=IgnoreNew，所以已在运行时不会重复启动
+#   2) 每 10 分钟检查一次 —— 进程若被意外结束，能在 10 分钟内自愈
+#      启动器内部有单实例保护，已在运行时不会重复启动
 $triggerLogon = New-ScheduledTaskTrigger -AtLogOn
 $triggerRepeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
   -RepetitionInterval (New-TimeSpan -Minutes 10)
@@ -58,12 +69,20 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName $taskName -Action $action `
   -Trigger @($triggerLogon, $triggerRepeat) -Settings $settings `
   -RunLevel Highest -Force | Out-Null
-Write-Host "[2/3] 已建立计划任务：$taskName（登录启动 + 每 10 分钟自愈检查）" -ForegroundColor Green
+Write-Host "[2/3] 已建立计划任务：$taskName（无窗口 + 登录启动 + 每 10 分钟自愈）" -ForegroundColor Green
 
 # ---------- 3. 立即启动 ----------
 Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 3
-Write-Host "[3/3] 守护进程已启动" -ForegroundColor Green
+Start-Sleep -Seconds 5
+
+# 验证真的起来了
+$alive = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+         Where-Object { $_.CommandLine -and $_.CommandLine -match 'daemon\.js' }
+if ($alive) {
+    Write-Host "[3/3] 守护进程已启动（PID $($alive[0].ProcessId)，无窗口）" -ForegroundColor Green
+} else {
+    Write-Host "[3/3] 守护进程未能启动，请检查 node 是否可用" -ForegroundColor Yellow
+}
 
 Write-Host ''
 Write-Host '安装完成！' -ForegroundColor Cyan

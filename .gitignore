@@ -13,3 +13,5 @@ desktop.ini
 *.tmp
 *.bak
 _*.txt
+src/node-path.txt
+src/_*.vbs

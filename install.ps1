@@ -42,17 +42,27 @@ Write-Host "[1/3] 已写入 WebView2 策略：$key" -ForegroundColor Green
 # ---------- 2. 开机自启守护进程 ----------
 $taskName = 'CLIPStudio_翻译守护'
 $action = New-ScheduledTaskAction -Execute $Node -Argument "`"$Daemon`"" -WorkingDirectory $Src
-$trigger = New-ScheduledTaskTrigger -AtLogOn
+
+# 双触发器：
+#   1) 登录时启动
+#   2) 每 10 分钟检查一次 —— 进程若被意外结束（崩溃/被杀），能在 10 分钟内自愈
+#      任务设了 MultipleInstances=IgnoreNew，所以已在运行时不会重复启动
+$triggerLogon = New-ScheduledTaskTrigger -AtLogOn
+$triggerRepeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
+  -RepetitionInterval (New-TimeSpan -Minutes 10)
+
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
   -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
-  -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
+  -MultipleInstances IgnoreNew -StartWhenAvailable
+
+Register-ScheduledTask -TaskName $taskName -Action $action `
+  -Trigger @($triggerLogon, $triggerRepeat) -Settings $settings `
   -RunLevel Highest -Force | Out-Null
-Write-Host "[2/3] 已建立计划任务：$taskName（登录后自动运行）" -ForegroundColor Green
+Write-Host "[2/3] 已建立计划任务：$taskName（登录启动 + 每 10 分钟自愈检查）" -ForegroundColor Green
 
 # ---------- 3. 立即启动 ----------
 Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 Write-Host "[3/3] 守护进程已启动" -ForegroundColor Green
 
 Write-Host ''

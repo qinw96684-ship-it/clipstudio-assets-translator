@@ -1,0 +1,15 @@
+# 依赖 / 构建产物
+node_modules/
+*.log
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本地临时文件
+*.tmp
+*.bak
+_*.txt
